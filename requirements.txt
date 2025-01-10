@@ -1,0 +1,4 @@
+selenium==4.27.1
+pandas==2.2.3
+webdriver-manager==4.0.2
+python-telegram-bot==21.10
