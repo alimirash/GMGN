@@ -29,6 +29,9 @@ def init_driver():
     chrome_options.add_experimental_option(
         "excludeSwitches", ["enable-automation"])
 
+    username = os.getlogin()
+    chrome_options.add_argument(f"user-data-dir=C:/Users/{username}/AppData/Local/Google/Chrome/User Data")
+    chrome_options.add_argument("profile-directory=Default")
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=chrome_options)
     return driver

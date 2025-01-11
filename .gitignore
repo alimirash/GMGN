@@ -20,3 +20,4 @@ build/
 .idea/
 config/
 __pycache__/
+gmgn/
