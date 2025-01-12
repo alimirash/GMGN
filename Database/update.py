@@ -102,19 +102,16 @@ async def process_scrape_result(update, context):
 async def list_tracked_addresses(update, context):
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT address FROM addresses LIMIT 5")
+        cursor.execute("SELECT address FROM addresses Limit 20")
         addresses = cursor.fetchall()
 
     if not addresses:
         await send_message(update, "No addresses found. Use the 'Add New Address' option to add one.")
         return
 
-    keyboard = [[InlineKeyboardButton(
-        addr[0], callback_data=addr[0])] for addr in addresses]
-    keyboard.append([InlineKeyboardButton(
-        "Add New Address", callback_data="add_new_address")])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Select an address or add a new one:", reply_markup=reply_markup)
+    addresses_text = "\n".join(f"`{address[0]}`" for address in addresses)
+    await update.message.reply_text(f"Tracked Addresses:\n{addresses_text}")
+    await send_message(update, "Use /add_new_address to add a new address.")
 
 
 async def button_handler(update, context):
@@ -179,11 +176,9 @@ def execute_bot():
         },
         fallbacks=[CommandHandler("cancel", cancel_operation)],
     ))
-    application.add_handler(CommandHandler("list_addresses", list_tracked_addresses))
+    application.add_handler(CommandHandler(
+        "list_addresses", list_tracked_addresses))
     application.add_handler(CommandHandler("scrap_all", scrape_all_addresses))
     application.add_handler(CallbackQueryHandler(button_handler))
     application.run_polling()
 
-
-if __name__ == "__main__":
-    execute_bot()

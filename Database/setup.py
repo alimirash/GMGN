@@ -12,5 +12,10 @@ def create_db():
             address TEXT UNIQUE NOT NULL
         )
     """)
+
+    with open(CSV_PATH, 'r', newline='', encoding='utf-8') as csvfile:
+        reader = csv.reader(csvfile)
+        addresses = [(row[0],) for row in reader]
+        cursor.executemany("INSERT OR IGNORE INTO addresses (address) VALUES (?)", addresses)
     conn.commit()
     conn.close()
