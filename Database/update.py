@@ -114,25 +114,6 @@ async def list_tracked_addresses(update, context):
     await send_message(update, "Use /add_new_address to add a new address.")
 
 
-async def button_handler(update, context):
-    query = update.callback_query
-    await query.answer()
-    address = query.data
-
-    if address == "add_new_address":
-        await query.message.reply_text("Please send the address you want to add:")
-        context.user_data["awaiting_address"] = True
-        return
-
-    # Handle existing addresses
-    csv_path = os.path.join("results", f"{address}.csv")
-    if os.path.exists(csv_path):
-        with open(csv_path, "rb") as file:
-            await query.message.reply_document(document=file, filename=f"{address}.csv")
-    else:
-        await query.message.reply_text("No results found for this address.")
-
-
 async def scrape_all_addresses(update, context):
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -157,6 +138,25 @@ async def cancel_operation(update, context):
     await update.message.reply_text("Operation canceled.")
     return ConversationHandler.END
 
+# async def button_handler(update, context):
+#     query = update.callback_query
+#     await query.answer()
+#     address = query.data
+
+#     if address == "add_new_address":
+#         await query.message.reply_text("Please send the address you want to add:")
+#         context.user_data["awaiting_address"] = True
+#         return
+
+#     # Handle existing addresses
+#     csv_path = os.path.join("results", f"{address}.csv")
+#     if os.path.exists(csv_path):
+#         with open(csv_path, "rb") as file:
+#             await query.message.reply_document(document=file, filename=f"{address}.csv")
+#     else:
+#         await query.message.reply_text("No results found for this address.")
+
+
 
 def execute_bot():
     create_db()
@@ -179,6 +179,5 @@ def execute_bot():
     application.add_handler(CommandHandler(
         "list_addresses", list_tracked_addresses))
     application.add_handler(CommandHandler("scrap_all", scrape_all_addresses))
-    application.add_handler(CallbackQueryHandler(button_handler))
+    # application.add_handler(CallbackQueryHandler(button_handler))
     application.run_polling()
-
