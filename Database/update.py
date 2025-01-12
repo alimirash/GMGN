@@ -1,5 +1,6 @@
 import sqlite3
 import os
+
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -7,31 +8,19 @@ from telegram.ext import (
     MessageHandler,
     CallbackQueryHandler,
     filters,
+    ConversationHandler
 )
 from config.configs import TELEGRAM_BOT_TOKEN, DB_PATH
-from Scrap.wallet_activity import wallet_scrap  # If needed to scrape new addresses
-
-
-# Ensure the database schema exists
-def initialize_database():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS addresses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            address TEXT UNIQUE NOT NULL
-        )
-        """
-    )
-    conn.commit()
-    conn.close()
+from Scrap.wallet_activity import wallet_scrap
+from Database.setup import create_db
+AWAITING_ADDRESS = 1
 
 
 async def start(update, context):
     await update.message.reply_text(
         "Welcome to the wallet tracker bot!\n"
         "Use the following commands:\n"
+        "/add_address - Add New Wallet Address\n"
         "/list_addresses - See tracked addresses\n"
         "/get_result <address> - Scrape a single address\n"
         "/scrap_all - Scrape all tracked addresses\n"
@@ -40,29 +29,37 @@ async def start(update, context):
 
 
 async def add_address(update, context):
-    # Check if the bot is awaiting an address
-    if not context.user_data.get("awaiting_address"):
-        await update.message.reply_text("Use /list_addresses and select 'Add New Address' to add a new address.")
-        return
+    await update.message.reply_text("Please enter the wallet address you want to add:")
+    return AWAITING_ADDRESS
 
+
+async def process_address(update, context):
     address = update.message.text.strip()
-    if len(address) >= 40:
-        await update.message.reply_text("Invalid wallet address format. Please provide a valid address.")
-        return
 
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    row = cursor.execute("SELECT 1 FROM addresses WHERE address = ?", (address,)).fetchone()
-    if row:
-        await update.message.reply_text("This wallet is already being tracked.")
+    if len(address) > 40:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        row = cursor.execute(
+            "SELECT 1 FROM addresses WHERE address = ?", (address,)).fetchone()
+
+        if row:
+            await update.message.reply_text("This wallet is already being tracked.")
+        else:
+            cursor.execute(
+                "INSERT INTO addresses (address) VALUES (?)", (address,))
+            conn.commit()
+            await update.message.reply_text(f"Address `{address}` added successfully.")
+
+        conn.close()
     else:
-        cursor.execute("INSERT INTO addresses (address) VALUES (?)", (address,))
-        conn.commit()
-        await update.message.reply_text(f"Address `{address}` added successfully.")
-    conn.close()
+        await update.message.reply_text("Invalid wallet address format. Please provide a valid address.")
 
-    # Reset the awaiting state
-    context.user_data["awaiting_address"] = False
+    return ConversationHandler.END
+
+
+async def cancel(update, context):
+    await update.message.reply_text("Operation canceled.")
+    return ConversationHandler.END
 
 
 async def send_result(update, context):
@@ -77,7 +74,7 @@ async def send_result(update, context):
     csv_path = os.path.join("results", f"{address}.csv")
     if os.path.exists(csv_path):
         with open(csv_path, "rb") as file:
-            await update.message.reply_document(document=file, filename=f"{address}.csv")
+            await update.message.reply_document(document=file, filename=f"{address}_{os.times}.csv")
     else:
         await update.message.reply_text("No results found for this address.")
 
@@ -93,8 +90,10 @@ async def list_addresses(update, context):
         await update.message.reply_text("No addresses found. Use the 'Add New Address' option to add one.")
         return
 
-    keyboard = [[InlineKeyboardButton(addr[0], callback_data=addr[0])] for addr in addresses]
-    keyboard.append([InlineKeyboardButton("Add New Address", callback_data="add_new_address")])
+    keyboard = [[InlineKeyboardButton(
+        addr[0], callback_data=addr[0])] for addr in addresses]
+    keyboard.append([InlineKeyboardButton(
+        "Add New Address", callback_data="add_new_address")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("Select an address or add a new one:", reply_markup=reply_markup)
 
@@ -140,10 +139,16 @@ async def scrap_all(update, context):
 
 
 def run_bot():
-    initialize_database()  # Ensure the database is ready
+    create_db()
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, add_address))
+    application.add_handler(ConversationHandler(
+        entry_points=[CommandHandler("add_address", add_address)],
+        states={
+            AWAITING_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_address)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    ))
     application.add_handler(CommandHandler("get_result", send_result))
     application.add_handler(CommandHandler("list_addresses", list_addresses))
     application.add_handler(CommandHandler("scrap_all", scrap_all))
