@@ -11,11 +11,6 @@ if __name__ == "__main__":
     os.makedirs("results", exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     db = conn.cursor()
-
     # create_db()
     run_bot()
-    # db.execute("""SELECT * FROM addresses""")
-    # addresses = db.fetchall()
-    # for address in addresses:
-    #     wallet_scrap(address[1])
-    #     time.sleep(300)
+   
