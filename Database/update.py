@@ -13,7 +13,7 @@ from telegram.ext import (
 from config.configs import TELEGRAM_BOT_TOKEN, DB_PATH
 from Scrap.wallet_activity import wallet_scrap
 from Database.setup import create_db
-AWAITING_ADDRESS = 1
+AWAITING_VALID_ADDRESS = 1
 
 
 async def start(update, context):
@@ -30,7 +30,7 @@ async def start(update, context):
 
 async def add_address(update, context):
     await update.message.reply_text("Please enter the wallet address you want to add:")
-    return AWAITING_ADDRESS
+    return AWAITING_VALID_ADDRESS
 
 
 async def process_address(update, context):
@@ -54,12 +54,7 @@ async def process_address(update, context):
     else:
         await update.message.reply_text("Invalid wallet address format. Please provide a valid address.")
 
-    return ConversationHandler.END
-
-
-async def cancel(update, context):
-    await update.message.reply_text("Operation canceled.")
-    return ConversationHandler.END
+    return AWAITING_VALID_ADDRESS
 
 
 async def send_result(update, context):
@@ -138,6 +133,11 @@ async def scrap_all(update, context):
             await update.message.reply_text(f"No results for {addr}.")
 
 
+async def cancel(update, context):
+    await update.message.reply_text("Operation canceled.")
+    return ConversationHandler.END
+
+
 def run_bot():
     create_db()
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
@@ -145,7 +145,7 @@ def run_bot():
     application.add_handler(ConversationHandler(
         entry_points=[CommandHandler("add_address", add_address)],
         states={
-            AWAITING_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_address)],
+            AWAITING_VALID_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_address)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     ))
