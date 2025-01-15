@@ -1,183 +1,296 @@
+# Organize Imports
 import sqlite3
 import os
-
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    filters,
-    ConversationHandler
-)
+import time
+import telebot
+from telebot import types
 from config.configs import TELEGRAM_BOT_TOKEN, DB_PATH
-from Scrap.wallet_activity import wallet_scrap
+from Scrap.request_response import scrape_address
 from Database.setup import create_db
+from datetime import datetime
+import csv  # Re-added import
+from enum import Enum
+import random
 
-AWAITING_VALID_ADDRESS = 1
-AWAITING_SEND_RESULT = 1
-
-
-async def start(update, context):
-    await update.message.reply_text(
-        "Welcome to the wallet tracker bot!\n"
-        "Use the following commands:\n"
-        "/add_address - Add New Wallet Address\n"
-        "/list_addresses - See tracked addresses\n"
-        "/get_result - Scrape a single address and save new address\n"
-        "/scrap_all - Scrape all tracked addresses\n"
-        "Send me a wallet address to add."
-    )
+# Define Enumerations
 
 
-def get_db_connection():
+class UserState(Enum):
+    AWAITING_VALID_ADDRESS = 1
+    AWAITING_SEND_RESULT = 2
+    UPDATING = 3
+    AWAITING_CSV_UPLOAD = 4
+
+
+# Initialize Bot and State Management
+bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
+user_states = {}
+
+# Decorators
+
+
+def log_username(func):
+    def wrapper(message, *args, **kwargs):
+        # Changed from message.chat.id to username
+        print(message.from_user.username)
+        return func(message, *args, **kwargs)
+    return wrapper
+
+# Helper Functions
+
+
+def human_likely_delay():
+    return random.randint(12, 20)
+
+
+def _fetch_db_connection():
     return sqlite3.connect(DB_PATH)
 
 
-def address_exists(conn, address: str) -> bool:
+def _is_address_present(conn, address: str) -> bool:
     return conn.cursor().execute("SELECT 1 FROM addresses WHERE address = ?", (address,)).fetchone() is not None
 
 
-def add_wallet_address_to_db(conn, address: str):
+def _insert_wallet_address(conn, address: str):
     conn.cursor().execute("INSERT INTO addresses (address) VALUES (?)", (address,))
     conn.commit()
 
 
-async def send_message(update, text):
-    await update.message.reply_text(text)
+def _send_message(chat_id, text):
+    bot.send_message(chat_id, text)
 
 
-async def add_wallet_address(update, context):
-    await update.message.reply_text("Please enter the wallet address you want to add:")
-    return AWAITING_VALID_ADDRESS
+def send_results_csv(chat_id):
+    with _fetch_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM results")
+        results = cursor.fetchall()
+        columns = [description[0] for description in cursor.description]
+
+    with open("results.csv", "w", newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(columns)
+        writer.writerows(results)
+
+    with open("results.csv", "rb") as file:
+        bot.send_document(chat_id, file)
+    os.remove("results.csv")
+
+# Bot Handlers
 
 
-async def handle_address_input(update, context):
-    address = update.message.text.strip()
+@bot.message_handler(commands=['start'])
+@log_username
+def start(message):
+    keyboard = types.InlineKeyboardMarkup()
+    keyboard.row(
+        types.InlineKeyboardButton("Add Address", callback_data="ADD_ADDRESS"),
+        types.InlineKeyboardButton(
+            "List Addresses", callback_data="LIST_ADDRESSES")
+    )
+    keyboard.row(
+        types.InlineKeyboardButton("Get Result", callback_data="GET_RESULT"),
+        types.InlineKeyboardButton("Update All", callback_data="UPDATE_ALL")
+    )
+    keyboard.row(
+        types.InlineKeyboardButton(
+            "Upload CSV", callback_data="UPLOAD_CSV"),  # Existing button
+        types.InlineKeyboardButton(
+            "Download CSV", callback_data="DOWNLOAD_CSV"),  # New button
+        types.InlineKeyboardButton("Cancel", callback_data="CANCEL")
+    )
+    bot.send_message(
+        message.chat.id,
+        "<b>Welcome to the Wallet Tracker Bot!</b> 🤖\n\n"
+        "Here's what I can do:\n"
+        "• Track multiple wallet addresses\n"
+        "• Scrape data for individual or all addresses\n"
+        "• Provide CSV exports on demand\n\n"
+        "Pick an option below or type /help for more commands.",
+        parse_mode="HTML",
+        reply_markup=keyboard
+    )
+
+
+@bot.message_handler(commands=['help'])
+@log_username
+def help_command(message):
+    _send_message(
+        message.chat.id,
+        "Available commands:\n"
+        "/start - Start the bot\n"
+        "/add_address - Add a new wallet address\n"
+        "/list_addresses - List tracked addresses\n"
+        "/get_result - Scrape a single address\n"
+        "/update_all - Scrape all addresses\n"
+        "/cancel - Cancel the current operation\n"
+        "/help - Show help message"
+    )
+
+
+@bot.callback_query_handler(func=lambda call: True)
+def manage_user_requests(call):
+    if call.data == "ADD_ADDRESS":
+        bot.send_message(call.message.chat.id,
+                         "Please enter the wallet address you want to add:")
+        user_states[call.message.chat.id] = UserState.AWAITING_VALID_ADDRESS
+    elif call.data == "LIST_ADDRESSES":
+        list_tracked_addresses(call.message)
+    elif call.data == "GET_RESULT":
+        bot.send_message(call.message.chat.id,
+                         "Please enter the wallet address you want to scrap:")
+        user_states[call.message.chat.id] = UserState.AWAITING_SEND_RESULT
+    elif call.data == "UPDATE_ALL":
+        update_all_addresses(call.message)
+    elif call.data == "UPLOAD_CSV":
+        bot.send_message(call.message.chat.id, "Please send the CSV file.")
+        user_states[call.message.chat.id] = UserState.AWAITING_CSV_UPLOAD
+    elif call.data == "DOWNLOAD_CSV":
+        send_results_csv(call.message.chat.id)
+    elif call.data == "CANCEL":
+        cancel_operation(call.message)
+
+
+@bot.message_handler(func=lambda msg: user_states.get(msg.chat.id) == UserState.AWAITING_VALID_ADDRESS)
+def check_and_save_address(message):
+    address = message.text.strip()
 
     if len(address) > 40:
-        with get_db_connection() as conn:
-            if address_exists(conn, address):
-                await send_message(update, "This wallet is already being tracked.")
+        with _fetch_db_connection() as conn:
+            if _is_address_present(conn, address):
+                _send_message(message.chat.id,
+                              "This wallet is already being tracked.")
             else:
-                add_wallet_address_to_db(conn, address)
-                await send_message(update, f"Address `{address}` added successfully.")
+                _insert_wallet_address(conn, address)
+                _send_message(message.chat.id,
+                              f"Address `{address}` added successfully.")
     else:
-        await send_message(update, "Invalid wallet address format. Please provide a valid address.")
+        _send_message(
+            message.chat.id, "Invalid wallet address format. Please provide a valid address.")
 
-    return AWAITING_VALID_ADDRESS
-
-
-async def request_scrape_result(update, context):
-    await update.message.reply_text("Please enter the wallet address you want to scrap:")
-    return AWAITING_SEND_RESULT
+    user_states[message.chat.id] = None
 
 
-async def process_scrape_result(update, context):
-    address = update.message.text.strip()
-    # we can offer to user use address in database
+@bot.message_handler(func=lambda msg: user_states.get(msg.chat.id) == UserState.AWAITING_SEND_RESULT)
+def process_scrape_result(message):
+    address = message.text.strip()
 
-    if AWAITING_SEND_RESULT:
-        with get_db_connection() as conn:
-            if address_exists(conn, address):
-                await send_message(update, "Awaiting, I'm Scraping . . .")
-                wallet_scrap(address)
-                await send_message(update, "Scraping successfully.")
+    if UserState.AWAITING_SEND_RESULT:
+        with _fetch_db_connection() as conn:
+            if _is_address_present(conn, address):
+                _send_message(message.chat.id, "Awaiting, I'm Scraping . . .")
+                status = scrape_address(address)
+                _send_message(message.chat.id, f"Scraping {status}.")
             else:
-                add_wallet_address_to_db(conn, address)
-                await send_message(update, f"Address `{address}` added successfully.")
-                await send_message(update, "Awaiting, I'm Scraping . . .")
-                wallet_scrap(address)
-                await send_message(update, "Scraping successfully.")
-                conn.commit()
+                if len(address) > 40:
+                    _insert_wallet_address(conn, address)
+                    _send_message(message.chat.id,
+                                  f"Address `{address}` added successfully.")
+                    _send_message(message.chat.id,
+                                  "Awaiting, I'm Scraping . . .")
+                    status = scrape_address(address)
+                    _send_message(message.chat.id, f"Scraping {status}.")
+                    conn.commit()
 
-        csv_path = os.path.join("results", f"{address}.csv")
-        if os.path.exists(csv_path):
-            with open(csv_path, "rb") as file:
-                await update.message.reply_document(document=file, filename=f"{address}_{os.times}.csv")
+    try:
+        conn = _fetch_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM results WHERE address = ?", (address,))
+        result = cursor.fetchone()
+        if result:
+            result_text = f"Results for `{address}`:\n"
+            columns = [description[0] for description in cursor.description]
+            for col, val in zip(columns, result):
+                result_text += f"{col}: {val}\n"
+            _send_message(message.chat.id, result_text)
         else:
-            await send_message(update, "No results found for this address.")
+            _send_message(message.chat.id,
+                          "No results found for this address.")
+    except sqlite3.Error as e:
+        _send_message(message.chat.id, f"Database error: {e}")
+    finally:
+        conn.close()
+
+    user_states[message.chat.id] = None
 
 
-async def list_tracked_addresses(update, context):
-    with get_db_connection() as conn:
+@bot.message_handler(commands=['list_addresses'])
+@log_username
+def list_tracked_addresses(message):
+    with _fetch_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT address FROM addresses Limit 20")
         addresses = cursor.fetchall()
 
     if not addresses:
-        await send_message(update, "No addresses found. Use the 'Add New Address' option to add one.")
+        _send_message(
+            message.chat.id, "No addresses found. Use the 'Add New Address' option to add one.")
         return
 
     addresses_text = "\n".join(f"`{address[0]}`" for address in addresses)
-    await update.message.reply_text(f"Tracked Addresses:\n{addresses_text}")
-    await send_message(update, "Use /add_new_address to add a new address.")
+    bot.send_message(message.chat.id, f"Tracked Addresses:\n{addresses_text}")
+    _send_message(message.chat.id, "Use /get_result to get result of wallet address.")
 
 
-async def scrape_all_addresses(update, context):
-    with get_db_connection() as conn:
+@bot.message_handler(commands=['update_all'])
+@log_username
+def update_all_addresses(message):
+    user_states[message.chat.id] = UserState.UPDATING
+    with _fetch_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT address FROM addresses")
         addresses = cursor.fetchall()
 
     if not addresses:
-        await send_message(update, "No addresses found.")
+        _send_message(message.chat.id, "No addresses found.")
+        user_states[message.chat.id] = None
         return
 
-    for (addr,) in addresses:
-        wallet_scrap(addr)
-        csv_path = os.path.join("results", f"{addr}.csv")
-        if os.path.exists(csv_path):
-            with open(csv_path, "rb") as file:
-                await update.message.reply_document(document=file, filename=f"{addr}.csv")
-        else:
-            await send_message(update, f"No results for {addr}.")
+    total = len(addresses)
+    status_message = bot.send_message(
+        message.chat.id, "Starting update... 0% completed.")
+    status_message_id = status_message.message_id
+
+    for idx, (addr,) in enumerate(addresses, start=1):
+        if user_states.get(message.chat.id) != UserState.UPDATING:
+            bot.edit_message_text(
+                "Update canceled.", chat_id=message.chat.id, message_id=status_message_id)
+            break
+        scrape_address(addr)
+        percent = int((idx / total) * 100)
+        bot.edit_message_text(f"Updating addresses: {percent}% completed.\nLast updated: `{addr}`",
+                              chat_id=message.chat.id,
+                              message_id=status_message_id)
+        time.sleep(human_likely_delay())
+
+    else:
+        bot.edit_message_text("Update completed successfully.",
+                              chat_id=message.chat.id, message_id=status_message_id)
+
+    user_states[message.chat.id] = None
 
 
-async def cancel_operation(update, context):
-    await update.message.reply_text("Operation canceled.")
-    return ConversationHandler.END
+@bot.message_handler(commands=['cancel'])
+@log_username
+def cancel_operation(message):
+    user_states[message.chat.id] = None
 
-# async def button_handler(update, context):
-#     query = update.callback_query
-#     await query.answer()
-#     address = query.data
 
-#     if address == "add_new_address":
-#         await query.message.reply_text("Please send the address you want to add:")
-#         context.user_data["awaiting_address"] = True
-#         return
-
-#     # Handle existing addresses
-#     csv_path = os.path.join("results", f"{address}.csv")
-#     if os.path.exists(csv_path):
-#         with open(csv_path, "rb") as file:
-#             await query.message.reply_document(document=file, filename=f"{address}.csv")
-#     else:
-#         await query.message.reply_text("No results found for this address.")
-
+@bot.message_handler(content_types=['document'], func=lambda msg: user_states.get(msg.chat.id) == UserState.AWAITING_CSV_UPLOAD)
+def handle_csv_upload(message):
+    _send_message(message.chat.id, "CSV upload is no longer supported.")
+    user_states[message.chat.id] = None
 
 
 def execute_bot():
     create_db()
-    application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(ConversationHandler(
-        entry_points=[CommandHandler("add_address", add_wallet_address)],
-        states={
-            AWAITING_VALID_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_address_input)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel_operation)],
-    ))
-    application.add_handler(ConversationHandler(
-        entry_points=[CommandHandler("get_result", request_scrape_result)],
-        states={
-            AWAITING_SEND_RESULT: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_scrape_result)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel_operation)],
-    ))
-    application.add_handler(CommandHandler(
-        "list_addresses", list_tracked_addresses))
-    application.add_handler(CommandHandler("scrap_all", scrape_all_addresses))
-    # application.add_handler(CallbackQueryHandler(button_handler))
-    application.run_polling()
+    bot.set_my_commands([
+        telebot.types.BotCommand("start", "Start the bot"),
+        telebot.types.BotCommand("add_address", "Add New Wallet Address"),
+        telebot.types.BotCommand("list_addresses", "List tracked addresses"),
+        telebot.types.BotCommand("get_result", "Scrape a single address"),
+        telebot.types.BotCommand("update_all", "Update all addresses"),
+        telebot.types.BotCommand("cancel", "Cancel operation"),
+        telebot.types.BotCommand("help", "Show help message")
+    ])
+    bot.infinity_polling()
