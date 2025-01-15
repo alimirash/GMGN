@@ -1,5 +1,6 @@
 import json
 import csv
+import os
 from bs4 import BeautifulSoup
 
 def extract_address_info(address,response):
@@ -13,8 +14,9 @@ def extract_address_info(address,response):
     props = json_data.get("props", {})
     page_props = props.get("pageProps", {})
     address_info = page_props.get("addressInfo", {})
-
-    with open(f'results\json\{address}.json', 'w', encoding='utf-8') as json_file:
+    json_path = os.path.join("results" , "json")
+    os.makedirs(json_path, exist_ok=True)
+    with open(rf'{json_path}\\{address}.json', 'w', encoding='utf-8') as json_file:
         json.dump(address_info, json_file, indent=4, ensure_ascii=False)
 
     fieldnames = [
@@ -28,7 +30,9 @@ def extract_address_info(address,response):
         "refresh_requested_at","avg_holding_peroid","name","avatar","ens","twitter_bind",
         "twitter_fans_num","twitter_username","twitter_name",
     ]
-    with open(f'results\csv\{address}.csv', 'w', newline='', encoding='utf-8') as csv_file:
+    csv_path = os.path.join("results" , "csv")
+    os.makedirs(csv_path , exist_ok=True)
+    with open(rf'{csv_path}\\{address}.csv', 'w', newline='', encoding='utf-8') as csv_file:
         writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerow(address_info)

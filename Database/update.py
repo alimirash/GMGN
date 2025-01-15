@@ -1,6 +1,6 @@
 import sqlite3
 import os
-
+import time
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -11,7 +11,7 @@ from telegram.ext import (
     ConversationHandler
 )
 from config.configs import TELEGRAM_BOT_TOKEN, DB_PATH
-from Scrap.wallet_activity import wallet_scrap
+from Scrap.req_res import scrape_address
 from Database.setup import create_db
 
 AWAITING_VALID_ADDRESS = 1
@@ -81,17 +81,17 @@ async def process_scrape_result(update, context):
         with get_db_connection() as conn:
             if address_exists(conn, address):
                 await send_message(update, "Awaiting, I'm Scraping . . .")
-                wallet_scrap(address)
+                scrape_address(address)
                 await send_message(update, "Scraping successfully.")
             else:
                 add_wallet_address_to_db(conn, address)
                 await send_message(update, f"Address `{address}` added successfully.")
                 await send_message(update, "Awaiting, I'm Scraping . . .")
-                wallet_scrap(address)
+                scrape_address(address)
                 await send_message(update, "Scraping successfully.")
                 conn.commit()
 
-        csv_path = os.path.join("results", f"{address}.csv")
+        csv_path = os.path.join("results", "csv" ,f"{address}.csv")
         if os.path.exists(csv_path):
             with open(csv_path, "rb") as file:
                 await update.message.reply_document(document=file, filename=f"{address}_{os.times}.csv")
@@ -125,8 +125,8 @@ async def scrape_all_addresses(update, context):
         return
 
     for (addr,) in addresses:
-        wallet_scrap(addr)
-        csv_path = os.path.join("results", f"{addr}.csv")
+        scrape_address(addr)
+        csv_path = os.path.join("results" ,"csv", f"{addr}.csv")
         if os.path.exists(csv_path):
             with open(csv_path, "rb") as file:
                 await update.message.reply_document(document=file, filename=f"{addr}.csv")
@@ -137,25 +137,6 @@ async def scrape_all_addresses(update, context):
 async def cancel_operation(update, context):
     await update.message.reply_text("Operation canceled.")
     return ConversationHandler.END
-
-# async def button_handler(update, context):
-#     query = update.callback_query
-#     await query.answer()
-#     address = query.data
-
-#     if address == "add_new_address":
-#         await query.message.reply_text("Please send the address you want to add:")
-#         context.user_data["awaiting_address"] = True
-#         return
-
-#     # Handle existing addresses
-#     csv_path = os.path.join("results", f"{address}.csv")
-#     if os.path.exists(csv_path):
-#         with open(csv_path, "rb") as file:
-#             await query.message.reply_document(document=file, filename=f"{address}.csv")
-#     else:
-#         await query.message.reply_text("No results found for this address.")
-
 
 
 def execute_bot():
@@ -179,5 +160,4 @@ def execute_bot():
     application.add_handler(CommandHandler(
         "list_addresses", list_tracked_addresses))
     application.add_handler(CommandHandler("scrap_all", scrape_all_addresses))
-    # application.add_handler(CallbackQueryHandler(button_handler))
     application.run_polling()

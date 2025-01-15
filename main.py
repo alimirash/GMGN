@@ -9,12 +9,8 @@ from config.configs import DB_PATH
 
 
 if __name__ == "__main__":
-    os.makedirs("results", exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    db = conn.cursor()
-    create_db()
+    # os.makedirs("results", exist_ok=True)
+    # create_db()
     execute_bot()
-    response=scrape_address(address="0x")
-    extract_address_info("0x",response)
 
    
