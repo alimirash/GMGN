@@ -13,6 +13,7 @@ from telegram.ext import (
 from config.configs import TELEGRAM_BOT_TOKEN, DB_PATH
 from Scrap.req_res import scrape_address
 from Database.setup import create_db
+from datetime import datetime
 
 AWAITING_VALID_ADDRESS = 1
 AWAITING_SEND_RESULT = 1
@@ -94,7 +95,7 @@ async def process_scrape_result(update, context):
         csv_path = os.path.join("results", "csv" ,f"{address}.csv")
         if os.path.exists(csv_path):
             with open(csv_path, "rb") as file:
-                await update.message.reply_document(document=file, filename=f"{address}_{os.times}.csv")
+                await update.message.reply_document(document=file, filename=f"{address}_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv")
         else:
             await send_message(update, "No results found for this address.")
 
@@ -111,7 +112,7 @@ async def list_tracked_addresses(update, context):
 
     addresses_text = "\n".join(f"`{address[0]}`" for address in addresses)
     await update.message.reply_text(f"Tracked Addresses:\n{addresses_text}")
-    await send_message(update, "Use /add_new_address to add a new address.")
+    await send_message(update, "Use /add_address to add a new address.")
 
 
 async def scrape_all_addresses(update, context):
@@ -129,7 +130,7 @@ async def scrape_all_addresses(update, context):
         csv_path = os.path.join("results" ,"csv", f"{addr}.csv")
         if os.path.exists(csv_path):
             with open(csv_path, "rb") as file:
-                await update.message.reply_document(document=file, filename=f"{addr}.csv")
+                await update.message.reply_document(document=file, filename=f"{addr}_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv")
         else:
             await send_message(update, f"No results for {addr}.")
 

@@ -9,7 +9,7 @@ def extract_address_info(address,response):
     if not script_tag:
         print("The specified script tag was not found.")
         return
-
+    
     json_data = json.loads(script_tag.string)
     props = json_data.get("props", {})
     page_props = props.get("pageProps", {})
