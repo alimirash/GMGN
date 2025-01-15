@@ -7,8 +7,8 @@ def scrape_address(address):
     base_url = "https://gmgn.ai/sol/address/"
     url = base_url + address
     authorization_token = secrets.token_hex(36)
-    cookie_session_id = secrets.token_hex(6)
-    cookie_csrf_token = secrets.token_hex(6)
+    # cookie_session_id = secrets.token_hex(6)
+    # cookie_csrf_token = secrets.token_hex(6)
     cookie = str(uuid.uuid4()) + "." + str(uuid.uuid4())
     curl_command = [
         "curl", "-X", "GET", url,
