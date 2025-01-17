@@ -1,7 +1,8 @@
-selenium==4.27.1
+# selenium==4.27.1
 pandas==2.2.3
-webdriver-manager==4.0.2
+# webdriver-manager==4.0.2
 python-telegram-bot==21.10
 fake_useragent==2.0.3
 telebot==0.0.5
-beautifulsoup4
+beautifulsoup4==4.12.3
+PyJWT==2.10.1

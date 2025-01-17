@@ -266,7 +266,7 @@ def update_all_addresses(message):
         bot.edit_message_text(f"Updating addresses: {percent}% completed.\nLast updated: `{addr}`",
                               chat_id=message.chat.id,
                               message_id=status_message_id)
-        time.sleep(human_likely_delay())
+        # time.sleep(human_likely_delay())
 
     else:
         bot.edit_message_text("Update completed successfully.",
