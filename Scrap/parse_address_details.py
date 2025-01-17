@@ -18,10 +18,8 @@ def extract_address_info(address, response):
     props = json_data.get("props", {})
     page_props = props.get("pageProps", {})
     address_info = page_props.get("addressInfo", {})
-    # Serialize 'tags' if it's a list
     if isinstance(address_info.get('tags'), list):
         address_info['tags'] = json.dumps(address_info['tags'])
-    # Serialize 'tag_rank' if it's a dict
     if isinstance(address_info.get('tag_rank'), dict):
         address_info['tag_rank'] = json.dumps(address_info['tag_rank'])
 

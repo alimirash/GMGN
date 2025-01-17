@@ -11,9 +11,9 @@ from datetime import datetime
 import csv  # Re-added import
 from enum import Enum
 import random
+from config.configs import CSV_PATH
 
 # Define Enumerations
-
 
 class UserState(Enum):
     AWAITING_VALID_ADDRESS = 1
@@ -40,7 +40,7 @@ def log_username(func):
 
 
 def human_likely_delay():
-    return random.randint(12, 20)
+    return random.randint(1, 2)
 
 
 def _fetch_db_connection():
@@ -97,6 +97,9 @@ def start(message):
             "Upload CSV", callback_data="UPLOAD_CSV"),  # Existing button
         types.InlineKeyboardButton(
             "Download CSV", callback_data="DOWNLOAD_CSV"),  # New button
+    )
+    keyboard.row(
+        types.InlineKeyboardButton("Drop DB", callback_data="DROP_DB"),
         types.InlineKeyboardButton("Cancel", callback_data="CANCEL")
     )
     bot.send_message(
@@ -147,6 +150,8 @@ def manage_user_requests(call):
         user_states[call.message.chat.id] = UserState.AWAITING_CSV_UPLOAD
     elif call.data == "DOWNLOAD_CSV":
         send_results_csv(call.message.chat.id)
+    elif call.data == "DROP_DB":
+        drop_database(call.message)
     elif call.data == "CANCEL":
         cancel_operation(call.message)
 
@@ -278,8 +283,27 @@ def cancel_operation(message):
 
 @bot.message_handler(content_types=['document'], func=lambda msg: user_states.get(msg.chat.id) == UserState.AWAITING_CSV_UPLOAD)
 def handle_csv_upload(message):
-    _send_message(message.chat.id, "CSV upload is no longer supported.")
+    file_info = bot.get_file(message.document.file_id)
+    downloaded_file = bot.download_file(file_info.file_path)
+    csv_data = downloaded_file.decode('utf-8').splitlines()
+    reader = csv.reader(csv_data)
+    with _fetch_db_connection() as conn:
+        for row in reader:
+            address = row[0].strip()
+            if len(address) > 40 and not _is_address_present(conn, address):
+                _insert_wallet_address(conn, address)
+    _send_message(message.chat.id, "CSV data has been imported successfully.")
     user_states[message.chat.id] = None
+
+
+def drop_database(message):
+    # Changed to delete all rows in tables instead of dropping the DB file
+    with _fetch_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM addresses")
+        cursor.execute("DELETE FROM results")
+        conn.commit()
+    _send_message(message.chat.id, "All tables have been cleared.")
 
 
 def execute_bot():
