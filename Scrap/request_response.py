@@ -4,6 +4,7 @@ import secrets
 import uuid
 from datetime import timedelta , datetime ,timezone
 import jwt
+import requests
 
 def generate_user_id():
     return str(uuid.uuid4())
@@ -44,16 +45,37 @@ def generate_jwt_for_request():
         "issuer": issuer
     }
 
+def get_cf_csrf_token(base_url):
+    response = requests.get(base_url)
+    if "Set-Cookie" in response.headers:
+        cookies = response.headers["Set-Cookie"]
+        for cookie in cookies.split(";"):
+            if "cf_csrf" in cookie.lower():
+                return cookie.split("=")[1].strip()
+    token = None
+    if not token:
+        # Retry once
+        response = requests.get(base_url)
+        if "Set-Cookie" in response.headers:
+            cookies = response.headers["Set-Cookie"]
+            for cookie in cookies.split(";"):
+                if "cf_csrf" in cookie.lower():
+                    token = cookie.split("=")[1].strip()
+    return token or "NO_TOKEN_FOUND"
+
 def scrape_address(address):
     base_url = "https://gmgn.ai/sol/address/"
     url = base_url + address
     request_details = generate_jwt_for_request()
     jwt_token = request_details["jwt_token"]
-    cookie = str(uuid.uuid4()) + "." + str(uuid.uuid4())
+    cf_csrf_token = get_cf_csrf_token(base_url)
+    if cf_csrf_token == "NO_TOKEN_FOUND":
+        print("Warning: CF-CSRF token not found, proceeding without it.")
+    cookie = f"cf_csrf={cf_csrf_token}; session-id={uuid.uuid4()}.{uuid.uuid4()}"
     curl_command = [
         "curl", "-X", "GET", url,
         "-H", f"Authorization: Bearer {jwt_token}",
-        "-H", f"Cookie: session-id={cookie}; cf_csrf=xyz456",
+        "-H", f"Cookie: {cookie}",
         "-H", "Accept: application/json",
         "-H", "Content-Type: application/json",
         "-H", "User-Agent: PostmanRuntime/7.43.0"
