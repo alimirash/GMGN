@@ -21,3 +21,5 @@ build/
 config/
 __pycache__/
 gmgn/
+vnev/
+venv/
