@@ -67,8 +67,8 @@ def scrape_address(address):
     request_details = generate_jwt_for_request()
     jwt_token = request_details["jwt_token"]
     cf_csrf_token = get_cf_csrf_token(base_url)
-    if cf_csrf_token == "NO_TOKEN_FOUND":
-        print("Warning: CF-CSRF token not found, proceeding without it.")
+    # if cf_csrf_token == "NO_TOKEN_FOUND":
+    #     print("Warning: CF-CSRF token not found, proceeding without it.")
     cookie = f"cf_csrf={cf_csrf_token}; session-id={uuid.uuid4()}.{uuid.uuid4()}"
     curl_command = [
         "curl", "-X", "GET", url,
