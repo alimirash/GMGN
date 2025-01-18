@@ -46,21 +46,19 @@ def generate_jwt_for_request():
     }
 
 def get_cf_csrf_token(base_url):
-    response = requests.get(base_url)
-    if "Set-Cookie" in response.headers:
-        cookies = response.headers["Set-Cookie"]
-        for cookie in cookies.split(";"):
-            if "cf_csrf" in cookie.lower():
-                return cookie.split("=")[1].strip()
-    token = None
+    def fetch_token():
+        command = ["curl", "-I", "-H", "User-Agent: PostmanRuntime/7.43.0", base_url]
+        result = subprocess.run(command, capture_output=True, text=True)
+        for line in result.stdout.splitlines():
+            if line.lower().startswith("set-cookie:"):
+                for cookie in line.split(";"):
+                    if "cf_csrf" in cookie.lower():
+                        return cookie.split("=")[1].strip()
+        return None
+
+    token = fetch_token()
     if not token:
-        # Retry once
-        response = requests.get(base_url)
-        if "Set-Cookie" in response.headers:
-            cookies = response.headers["Set-Cookie"]
-            for cookie in cookies.split(";"):
-                if "cf_csrf" in cookie.lower():
-                    token = cookie.split("=")[1].strip()
+        token = fetch_token()
     return token or "NO_TOKEN_FOUND"
 
 def scrape_address(address):
