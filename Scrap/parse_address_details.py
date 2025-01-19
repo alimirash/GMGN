@@ -5,7 +5,6 @@ import sqlite3
 from bs4 import BeautifulSoup
 from config.configs import DB_PATH
 
-
 def extract_address_info(address, response):
     soup = BeautifulSoup(response, 'html.parser')
     script_tag = soup.find(

@@ -1,10 +1,11 @@
-import subprocess
-from Scrap.parse_address_details import extract_address_info
-import secrets
-import uuid
-from datetime import timedelta , datetime ,timezone
 import jwt
-import requests
+import uuid
+import time 
+import secrets
+import subprocess
+import cloudscraper
+from datetime import timedelta , datetime ,timezone
+from Scrap.parse_address_details import extract_address_info
 
 def generate_user_id():
     return str(uuid.uuid4())
@@ -45,42 +46,39 @@ def generate_jwt_for_request():
         "issuer": issuer
     }
 
-def get_cf_csrf_token(base_url):
-    def fetch_token():
-        command = ["curl", "-I", "-H", "User-Agent: PostmanRuntime/7.43.0", base_url]
-        result = subprocess.run(command, capture_output=True, text=True)
-        for line in result.stdout.splitlines():
-            if line.lower().startswith("set-cookie:"):
-                for cookie in line.split(";"):
-                    if "cf_csrf" in cookie.lower():
-                        return cookie.split("=")[1].strip()
-        return None
+def generate_cf_csrf_token():
+    token = secrets.token_hex(16)
+    return token
 
-    token = fetch_token()
-    if not token:
-        token = fetch_token()
-    return token or "NO_TOKEN_FOUND"
+def get_cf_clearance(url):
+    scraper = cloudscraper.create_scraper()
+    response = scraper.get(url)
+    return scraper.cookies.get('cf_clearance')
 
 def scrape_address(address):
-    base_url = "https://gmgn.ai/sol/address/"
-    url = base_url + address
-    request_details = generate_jwt_for_request()
-    jwt_token = request_details["jwt_token"]
-    cf_csrf_token = get_cf_csrf_token(base_url)
-    # if cf_csrf_token == "NO_TOKEN_FOUND":
-    #     print("Warning: CF-CSRF token not found, proceeding without it.")
-    cookie = f"cf_csrf={cf_csrf_token}; session-id={uuid.uuid4()}.{uuid.uuid4()}"
-    curl_command = [
-        "curl", "-X", "GET", url,
-        "-H", f"Authorization: Bearer {jwt_token}",
-        "-H", f"Cookie: {cookie}",
-        "-H", "Accept: application/json",
-        "-H", "Content-Type: application/json",
-        "-H", "User-Agent: PostmanRuntime/7.43.0"
-    ]
-    result = subprocess.run(curl_command, capture_output=True, text=True)
+    base_url = "https://gmgn.ai/"
+    chain = "sol/address/"
+    url = base_url + chain + address
+    while True:
+        request_details = generate_jwt_for_request()
+        jwt_token = request_details["jwt_token"]
+        cf_csrf_token = generate_cf_csrf_token() 
+        cookie = f"_ga=GA1.1.{uuid.uuid4()}.{int(time.time())}; cf_clearance={get_cf_clearance(base_url)}; __cf_bm={cf_csrf_token}; _ga_0XM0LYXGC8=GS1.1.{int(time.time())}.12.1.{uuid.uuid4()}.0.0.0"
+        curl_command = [
+            "curl", "-X", "GET", url,
+            "-H", f"Authorization: Bearer {jwt_token}",
+            "-H", f"Cookie: {cookie}",
+            "-H", "Accept: application/json",
+            "-H", "Content-Type: application/json",
+            "-H", "User-Agent: PostmanRuntime/7.43.0"
+        ]
+        result = subprocess.run(curl_command, capture_output=True, text=True)
 
-    response = result.stdout
-    status = extract_address_info(address, response)
+        response = result.stdout
+        status = extract_address_info(address, response)
+        if status == "Successful":
+            break
+        else:
+            print(f"Request failed, retrying {address}")
     return status
 
