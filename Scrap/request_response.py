@@ -52,13 +52,14 @@ def generate_cf_csrf_token():
 
 def get_cf_clearance(url):
     scraper = cloudscraper.create_scraper()
-    # response = scraper.get(url)
+    response = scraper.get(url)
     return scraper.cookies.get('cf_clearance')
 
 def scrape_address(address):
     base_url = "https://gmgn.ai/"
     chain = "sol/address/"
     url = base_url + chain + address
+    status = "Failure"
     while True:
         request_details = generate_jwt_for_request()
         jwt_token = request_details["jwt_token"]
@@ -75,6 +76,9 @@ def scrape_address(address):
         result = subprocess.run(curl_command, capture_output=True, text=True)
 
         response = result.stdout
+        if not response:
+            print("Empty response. Retrying...")
+            break
         status = extract_address_info(address, response)
         if status == "Successful":
             break
