@@ -30,8 +30,8 @@ def log_username(func):
     return wrapper
 
 
-# def human_likely_delay():
-#     return random.randint(1, 2)
+def human_likely_delay():
+    return random.randint(1, 2)
 
 
 def _fetch_db_connection():
@@ -132,7 +132,15 @@ def manage_user_requests(call):
     elif call.data == "CANCEL":
         cancel_operation(call.message)
     elif call.data == "RESUME_UPDATE":
-        resume_update_addresses(call.message)
+        resume_update_addresses(
+            call.message,
+            bot,
+            user_states,
+            UserState,
+            _fetch_db_connection,
+            _send_message,
+            human_likely_delay
+        )
 
 
 @bot.message_handler(func=lambda msg: user_states.get(msg.chat.id) == UserState.AWAITING_VALID_ADDRESS)
