@@ -102,6 +102,9 @@ def start(message):
         types.InlineKeyboardButton("Drop DB", callback_data="DROP_DB"),
         types.InlineKeyboardButton("Cancel", callback_data="CANCEL")
     )
+    keyboard.row(
+        types.InlineKeyboardButton("Resume Update", callback_data="RESUME_UPDATE")
+    )
     bot.send_message(
         message.chat.id,
         "<b>Welcome to the Wallet Tracker Bot!</b> 🤖\n\n"
@@ -154,6 +157,8 @@ def manage_user_requests(call):
         drop_database(call.message)
     elif call.data == "CANCEL":
         cancel_operation(call.message)
+    elif call.data == "RESUME_UPDATE":
+        resume_update_addresses(call.message)
 
 
 @bot.message_handler(func=lambda msg: user_states.get(msg.chat.id) == UserState.AWAITING_VALID_ADDRESS)
@@ -304,6 +309,53 @@ def drop_database(message):
         cursor.execute("DELETE FROM results")
         conn.commit()
     _send_message(message.chat.id, "All tables have been cleared.")
+
+
+def resume_update_addresses(message):
+    with _fetch_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT a.address
+            FROM addresses a
+            LEFT JOIN results r ON a.address = r.address
+            WHERE r.address IS NULL
+        """)
+        missing = cursor.fetchall()
+
+    if not missing:
+        _send_message(message.chat.id, "All addresses have results.")
+        return
+
+    user_states[message.chat.id] = UserState.UPDATING
+    total = len(missing)
+    status_message = bot.send_message(
+        message.chat.id, "Resuming update... 0% completed.")
+    status_message_id = status_message.message_id
+
+    for idx, (addr,) in enumerate(missing, start=1):
+        if user_states.get(message.chat.id) != UserState.UPDATING:
+            bot.edit_message_text(
+                "Resume update canceled.",
+                chat_id=message.chat.id,
+                message_id=status_message_id
+            )
+            break
+        scrape_address(addr)
+        percent = int((idx / total) * 100)
+        bot.edit_message_text(
+            f"Resuming update: {percent}% completed.\nLast updated: `{addr}`",
+            chat_id=message.chat.id,
+            message_id=status_message_id
+        )
+        # time.sleep(human_likely_delay())
+    else:
+        bot.edit_message_text(
+            "Resume update completed successfully.",
+            chat_id=message.chat.id,
+            message_id=status_message_id
+        )
+
+    user_states[message.chat.id] = None
 
 
 def execute_bot():
