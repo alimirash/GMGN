@@ -126,7 +126,7 @@ def manage_user_requests(call):
         bot.send_message(call.message.chat.id, "Please send the CSV file.")
         user_states[call.message.chat.id] = UserState.AWAITING_CSV_UPLOAD
     elif call.data == "DOWNLOAD_CSV":
-        send_results_csv(call.message.chat.id)
+        send_results_csv(call.message.chat.id, bot, _fetch_db_connection)
     elif call.data == "DROP_DB":
         drop_database(call.message)
     elif call.data == "CANCEL":
