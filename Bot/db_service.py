@@ -8,12 +8,13 @@ from config.configs import TELEGRAM_BOT_TOKEN, DB_PATH
 from Scrap.request_response import scrape_address
 from Database.setup import create_db
 from datetime import datetime
-import csv  # Re-added import
+import csv
 from enum import Enum
 import random
 from config.configs import CSV_PATH
 
 # Define Enumerations
+
 
 class UserState(Enum):
     AWAITING_VALID_ADDRESS = 1
@@ -103,7 +104,8 @@ def start(message):
         types.InlineKeyboardButton("Cancel", callback_data="CANCEL")
     )
     keyboard.row(
-        types.InlineKeyboardButton("Resume Update", callback_data="RESUME_UPDATE")
+        types.InlineKeyboardButton(
+            "Resume Update", callback_data="RESUME_UPDATE")
     )
     bot.send_message(
         message.chat.id,
@@ -239,7 +241,8 @@ def list_tracked_addresses(message):
 
     addresses_text = "\n".join(f"`{address[0]}`" for address in addresses)
     bot.send_message(message.chat.id, f"Tracked Addresses:\n{addresses_text}")
-    _send_message(message.chat.id, "Use /get_result to get result of wallet address.")
+    _send_message(message.chat.id,
+                  "Use /get_result to get result of wallet address.")
 
 
 @bot.message_handler(commands=['update_all'])
