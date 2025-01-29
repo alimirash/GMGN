@@ -1,70 +1,47 @@
-# GMGN
+# GMGN Project
+
+![GitHub repo size](https://img.shields.io/github/repo-size/alimirash/GMGN)
+![GitHub contributors](https://img.shields.io/github/contributors/alimirash/GMGN)
+![GitHub stars](https://img.shields.io/github/stars/alimirash/GMGN?style=social)
+![GitHub forks](https://img.shields.io/github/forks/alimirash/GMGN?style=social)
 
 ## Overview
-GMGN is a web scraping project designed to track wallet activities on the GMGN platform. It uses Selenium for web scraping and integrates with a Telegram bot to manage wallet addresses.
+GMGN is a simple yet powerful solution for collecting, tracking, and analyzing on-chain data. It fetches information from various blockchains, stores them in a local database, and provides commands for quickly retrieving or updating wallet data.
 
 ## Features
-- Scrape wallet activity data from GMGN.
-- Store wallet addresses in a SQLite database.
-- Add wallet addresses via a Telegram bot.
-- Retrieve and display XHR responses from the web scraping process.
+- Manage multiple wallet addresses
+- Retrieve token balances, PnL, and other on-chain metrics
+- Update and retrieve data via Telegram Bot
+- Export results to CSV for quick sharing or further analysis
+
+## Directory Structure
+- **Scrap/**: Contains scraping scripts (request/response logic, address parsing)
+- **Database/**: Database setup and migration scripts
+- **Bot/**: Telegram bot handlers, including main interface and services
+- **config/**: Global configurations (DB paths, tokens, etc.)
 
 ## Requirements
-- Python 3.8+
-- Selenium 4.27.1
-- Pandas 2.2.3
-- Webdriver Manager 4.0.2
-- Python Telegram Bot 21.10
-- Fake UserAgent
+- Python 3.9+
+- Required libraries are listed in requirements.txt (PyJWT, cloudscraper, etc.)
+- A Telegram bot token (see configs.py)
 
 ## Installation
-1. Clone the repository:
-    ```sh
-    git clone https://github.com/yourusername/GMGN.git
-    cd GMGN
-    ```
-
-2. Install the required Python packages:
-    ```sh
-    pip install -r requirements.txt
-    ```
-
-3. Set up the SQLite database:
-    ```sh
-    python -m Database.setup
-    ```
+1. Clone or download this repository.
+2. Install dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
+3. Edit configs.py to set your own DB_PATH, CSV_PATH, and TELEGRAM_BOT_TOKEN.
 
 ## Usage
-1. Start the web scraping script:
-    ```sh
-    python Scrap/wallet_activity.py
-    ```
+1. Run main.py to initialize the bot:
+   ```
+   python main.py
+   ```
+2. Interact with the bot via Telegram to add wallet addresses, scrape results, and export data.
 
-2. Run the Telegram bot:
-    ```sh
-    python main.py
-    ```
-
-## Configuration
-- Ensure you have a valid Telegram bot token and update the `config/configs.py` file with your token and database path.
-
-## File Structure
-```
-GMGN/
-├── Database/
-│   ├── setup.py
-│   ├── update.py
-├── Scrap/
-│   ├── wallet_activity.py
-├── Data/
-│   ├── address.csv
-├── config/
-│   ├── configs.py
-├── .gitignore
-├── README.md
-├── requirements.txt
-├── main.py
-```
+## Contributing
+Contributions are welcome! Please create a pull request for any improvements or bug fixes.
 
 ## License
-This project is licensed under the MIT License.
+MIT License
